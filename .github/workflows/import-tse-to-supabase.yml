@@ -1,0 +1,14 @@
+name: Import TSE para Supabase
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/import-tse-to-supabase.yml'
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Importar candidatos filtrados
+        run: |
+          set -e
+          curl --fail --show-error --silent 'https://dxvqiiawthxwkypvsxci.supabase.co/functions/v1/urna-sync-candidatos-tse?key=sync-urna-2026-8b6c2e9f'

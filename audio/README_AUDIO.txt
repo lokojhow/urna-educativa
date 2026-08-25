@@ -1,0 +1,1 @@
+O som de confirmacao usado pela urna deve ser o arquivo enviado pelo usuario em 25/08/2026. Nao usar tons sintetizados como substituto.

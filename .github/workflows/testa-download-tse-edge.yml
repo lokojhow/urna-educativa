@@ -1,0 +1,11 @@
+name: Testa download TSE pelo servidor
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/testa-download-tse-edge.yml'
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - run: curl --show-error --silent 'https://dxvqiiawthxwkypvsxci.supabase.co/functions/v1/urna-importa-fotos-tse'

@@ -1,0 +1,88 @@
+name: Sync TSE Candidatos 2026
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/sync-tse-candidatos.yml'
+permissions:
+  contents: write
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Baixar e filtrar candidatos oficiais
+        shell: bash
+        run: |
+          set -e
+          mkdir -p data/tse2026 tmp
+          python3 - <<'PY'
+          import csv, io, json, os, urllib.request, zipfile
+          tse='https://cdn.tse.jus.br/estatistica/sead/odsele/consulta_cand/consulta_cand_2026.zip'
+          mirror='https://raw.githubusercontent.com/leofn/tse-candidatos-2026/main/dados/consulta_cand_2026_BRASIL.csv'
+          raw=None
+          try:
+              req=urllib.request.Request(tse,headers={'User-Agent':'Mozilla/5.0'})
+              with urllib.request.urlopen(req,timeout=90) as r: z=r.read()
+              zz=zipfile.ZipFile(io.BytesIO(z))
+              names=[n for n in zz.namelist() if n.lower().endswith('brasil.csv')]
+              if not names: names=[n for n in zz.namelist() if n.lower().endswith('.csv')]
+              # concat all UF CSVs because BRASIL file may not exist in some releases
+              chunks=[]
+              for n in names:
+                  chunks.append(zz.read(n).decode('latin-1'))
+              if len(chunks)==1: raw=chunks[0]
+              else:
+                  header=chunks[0].splitlines()[0]
+                  lines=[header]
+                  for c in chunks:
+                      ls=c.splitlines()
+                      lines.extend(ls[1:])
+                  raw='\n'.join(lines)
+          except Exception as e:
+              print('TSE direto falhou, usando espelho:',e)
+              req=urllib.request.Request(mirror,headers={'User-Agent':'Mozilla/5.0'})
+              with urllib.request.urlopen(req,timeout=90) as r:
+                  b=r.read()
+              raw=b.decode('latin-1')
+          rd=csv.DictReader(io.StringIO(raw),delimiter=';')
+          wanted={'PRESIDENTE','GOVERNADOR','SENADOR','DEPUTADO FEDERAL','DEPUTADO ESTADUAL'}
+          out=[]
+          status={}
+          for r in rd:
+              cargo=(r.get('DS_CARGO') or '').upper().strip()
+              uf=(r.get('SG_UF') or r.get('SG_UE') or '').upper().strip()
+              if cargo not in wanted: continue
+              if cargo!='PRESIDENTE' and uf!='PE': continue
+              if cargo=='PRESIDENTE' and uf not in ('BR','BRASIL'): continue
+              situ=(r.get('DS_SITUACAO_CANDIDATURA') or '').upper().strip()
+              status[situ]=status.get(situ,0)+1
+              # mantém registros aptos e os ainda aguardando julgamento; exclui apenas situações explicitamente inaptas/canceladas
+              bad=('INAPTO','CANCELADO','CASSADO','RENÚNCIA','RENUNCIA','FALECIDO')
+              ativo=not any(x in situ for x in bad)
+              if not ativo: continue
+              out.append({
+                'sq_candidato':r.get('SQ_CANDIDATO','').strip(),
+                'uf':'BR' if cargo=='PRESIDENTE' else 'PE',
+                'cargo':cargo,
+                'numero':r.get('NR_CANDIDATO','').strip(),
+                'nome':(r.get('NM_URNA_CANDIDATO') or r.get('NM_CANDIDATO') or '').strip(),
+                'nome_completo':(r.get('NM_CANDIDATO') or '').strip(),
+                'partido':(r.get('SG_PARTIDO') or '').strip(),
+                'situacao':situ,
+              })
+          out.sort(key=lambda x:({'DEPUTADO FEDERAL':1,'DEPUTADO ESTADUAL':2,'SENADOR':3,'GOVERNADOR':4,'PRESIDENTE':5}[x['cargo']], int(x['numero']) if x['numero'].isdigit() else 999999, x['nome']))
+          os.makedirs('data/tse2026',exist_ok=True)
+          with open('data/tse2026/candidatos-pe-br.json','w',encoding='utf-8') as f: json.dump(out,f,ensure_ascii=False,indent=2)
+          from collections import Counter
+          counts=Counter(x['cargo'] for x in out)
+          with open('data/tse2026/resumo.json','w',encoding='utf-8') as f: json.dump({'total':len(out),'por_cargo':counts,'status_encontrados':status},f,ensure_ascii=False,indent=2)
+          print('Total filtrado',len(out),counts)
+          PY
+      - name: Commit dos dados filtrados
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add data/tse2026
+          git diff --cached --quiet || git commit -m 'Atualiza candidatos oficiais TSE 2026 PE e Presidência'
+          git push

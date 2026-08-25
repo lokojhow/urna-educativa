@@ -1,0 +1,13 @@
+{
+  "total": 935,
+  "por_cargo": {
+    "DEPUTADO FEDERAL": 388,
+    "DEPUTADO ESTADUAL": 514,
+    "SENADOR": 12,
+    "GOVERNADOR": 8,
+    "PRESIDENTE": 13
+  },
+  "status_encontrados": {
+    "#NE": 935
+  }
+}

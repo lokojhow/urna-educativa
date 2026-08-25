@@ -7,6 +7,13 @@
     "GOVERNADOR": 8,
     "PRESIDENTE": 13
   },
+  "eleicoes": {
+    "DEPUTADO FEDERAL:6259": 388,
+    "DEPUTADO ESTADUAL:6259": 514,
+    "SENADOR:6259": 12,
+    "GOVERNADOR:6259": 8,
+    "PRESIDENTE:6257": 13
+  },
   "status_encontrados": {
     "#NE": 935
   }

@@ -13,3 +13,4 @@ jobs:
           set -e
           curl --show-error --silent 'https://dxvqiiawthxwkypvsxci.supabase.co/functions/v1/urna-sync-candidatos-tse'
           echo
+          # nova execução após ajuste do índice do Senado

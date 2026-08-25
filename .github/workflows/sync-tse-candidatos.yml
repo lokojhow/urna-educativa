@@ -27,56 +27,36 @@ jobs:
               zz=zipfile.ZipFile(io.BytesIO(z))
               names=[n for n in zz.namelist() if n.lower().endswith('brasil.csv')]
               if not names: names=[n for n in zz.namelist() if n.lower().endswith('.csv')]
-              # concat all UF CSVs because BRASIL file may not exist in some releases
               chunks=[]
-              for n in names:
-                  chunks.append(zz.read(n).decode('latin-1'))
+              for n in names: chunks.append(zz.read(n).decode('latin-1'))
               if len(chunks)==1: raw=chunks[0]
               else:
                   header=chunks[0].splitlines()[0]
                   lines=[header]
-                  for c in chunks:
-                      ls=c.splitlines()
-                      lines.extend(ls[1:])
+                  for c in chunks: lines.extend(c.splitlines()[1:])
                   raw='\n'.join(lines)
           except Exception as e:
               print('TSE direto falhou, usando espelho:',e)
               req=urllib.request.Request(mirror,headers={'User-Agent':'Mozilla/5.0'})
-              with urllib.request.urlopen(req,timeout=90) as r:
-                  b=r.read()
+              with urllib.request.urlopen(req,timeout=90) as r: b=r.read()
               raw=b.decode('latin-1')
           rd=csv.DictReader(io.StringIO(raw),delimiter=';')
           wanted={'PRESIDENTE','GOVERNADOR','SENADOR','DEPUTADO FEDERAL','DEPUTADO ESTADUAL'}
-          out=[]
-          status={}
+          out=[]; status={}
           for r in rd:
-              cargo=(r.get('DS_CARGO') or '').upper().strip()
-              uf=(r.get('SG_UF') or r.get('SG_UE') or '').upper().strip()
+              cargo=(r.get('DS_CARGO') or '').upper().strip(); uf=(r.get('SG_UF') or r.get('SG_UE') or '').upper().strip()
               if cargo not in wanted: continue
               if cargo!='PRESIDENTE' and uf!='PE': continue
               if cargo=='PRESIDENTE' and uf not in ('BR','BRASIL'): continue
-              situ=(r.get('DS_SITUACAO_CANDIDATURA') or '').upper().strip()
-              status[situ]=status.get(situ,0)+1
-              # mantém registros aptos e os ainda aguardando julgamento; exclui apenas situações explicitamente inaptas/canceladas
+              situ=(r.get('DS_SITUACAO_CANDIDATURA') or '').upper().strip(); status[situ]=status.get(situ,0)+1
               bad=('INAPTO','CANCELADO','CASSADO','RENÚNCIA','RENUNCIA','FALECIDO')
-              ativo=not any(x in situ for x in bad)
-              if not ativo: continue
-              out.append({
-                'sq_candidato':r.get('SQ_CANDIDATO','').strip(),
-                'uf':'BR' if cargo=='PRESIDENTE' else 'PE',
-                'cargo':cargo,
-                'numero':r.get('NR_CANDIDATO','').strip(),
-                'nome':(r.get('NM_URNA_CANDIDATO') or r.get('NM_CANDIDATO') or '').strip(),
-                'nome_completo':(r.get('NM_CANDIDATO') or '').strip(),
-                'partido':(r.get('SG_PARTIDO') or '').strip(),
-                'situacao':situ,
-              })
-          out.sort(key=lambda x:({'DEPUTADO FEDERAL':1,'DEPUTADO ESTADUAL':2,'SENADOR':3,'GOVERNADOR':4,'PRESIDENTE':5}[x['cargo']], int(x['numero']) if x['numero'].isdigit() else 999999, x['nome']))
-          os.makedirs('data/tse2026',exist_ok=True)
+              if any(x in situ for x in bad): continue
+              out.append({'sq_candidato':r.get('SQ_CANDIDATO','').strip(),'uf':'BR' if cargo=='PRESIDENTE' else 'PE','cargo':cargo,'numero':r.get('NR_CANDIDATO','').strip(),'nome':(r.get('NM_URNA_CANDIDATO') or r.get('NM_CANDIDATO') or '').strip(),'nome_completo':(r.get('NM_CANDIDATO') or '').strip(),'partido':(r.get('SG_PARTIDO') or '').strip(),'situacao':situ})
+          out.sort(key=lambda x:({'DEPUTADO FEDERAL':1,'DEPUTADO ESTADUAL':2,'SENADOR':3,'GOVERNADOR':4,'PRESIDENTE':5}[x['cargo']],int(x['numero']) if x['numero'].isdigit() else 999999,x['nome']))
           with open('data/tse2026/candidatos-pe-br.json','w',encoding='utf-8') as f: json.dump(out,f,ensure_ascii=False,indent=2)
           from collections import Counter
           counts=Counter(x['cargo'] for x in out)
-          with open('data/tse2026/resumo.json','w',encoding='utf-8') as f: json.dump({'total':len(out),'por_cargo':counts,'status_encontrados':status},f,ensure_ascii=False,indent=2)
+          with open('data/tse2026/resumo.json','w',encoding='utf-8') as f: json.dump({'total':len(out),'por_cargo':dict(counts),'status_encontrados':status},f,ensure_ascii=False,indent=2)
           print('Total filtrado',len(out),counts)
           PY
       - name: Commit dos dados filtrados

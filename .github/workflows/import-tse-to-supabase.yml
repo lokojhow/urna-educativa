@@ -11,5 +11,5 @@ jobs:
       - name: Importar candidatos filtrados
         run: |
           set -e
-          curl --show-error --silent 'https://dxvqiiawthxwkypvsxci.supabase.co/functions/v1/urna-sync-candidatos-tse?key=sync-urna-2026-8b6c2e9f'
+          curl --show-error --silent 'https://dxvqiiawthxwkypvsxci.supabase.co/functions/v1/urna-sync-candidatos-tse'
           echo

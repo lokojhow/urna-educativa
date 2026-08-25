@@ -51,13 +51,14 @@ jobs:
               situ=(r.get('DS_SITUACAO_CANDIDATURA') or '').upper().strip(); status[situ]=status.get(situ,0)+1
               bad=('INAPTO','CANCELADO','CASSADO','RENÚNCIA','RENUNCIA','FALECIDO')
               if any(x in situ for x in bad): continue
-              out.append({'sq_candidato':r.get('SQ_CANDIDATO','').strip(),'uf':'BR' if cargo=='PRESIDENTE' else 'PE','cargo':cargo,'numero':r.get('NR_CANDIDATO','').strip(),'nome':(r.get('NM_URNA_CANDIDATO') or r.get('NM_CANDIDATO') or '').strip(),'nome_completo':(r.get('NM_CANDIDATO') or '').strip(),'partido':(r.get('SG_PARTIDO') or '').strip(),'situacao':situ})
+              out.append({'sq_candidato':r.get('SQ_CANDIDATO','').strip(),'cd_eleicao':r.get('CD_ELEICAO','').strip(),'uf':'BR' if cargo=='PRESIDENTE' else 'PE','cargo':cargo,'numero':r.get('NR_CANDIDATO','').strip(),'nome':(r.get('NM_URNA_CANDIDATO') or r.get('NM_CANDIDATO') or '').strip(),'nome_completo':(r.get('NM_CANDIDATO') or '').strip(),'partido':(r.get('SG_PARTIDO') or '').strip(),'situacao':situ})
           out.sort(key=lambda x:({'DEPUTADO FEDERAL':1,'DEPUTADO ESTADUAL':2,'SENADOR':3,'GOVERNADOR':4,'PRESIDENTE':5}[x['cargo']],int(x['numero']) if x['numero'].isdigit() else 999999,x['nome']))
           with open('data/tse2026/candidatos-pe-br.json','w',encoding='utf-8') as f: json.dump(out,f,ensure_ascii=False,indent=2)
           from collections import Counter
           counts=Counter(x['cargo'] for x in out)
-          with open('data/tse2026/resumo.json','w',encoding='utf-8') as f: json.dump({'total':len(out),'por_cargo':dict(counts),'status_encontrados':status},f,ensure_ascii=False,indent=2)
-          print('Total filtrado',len(out),counts)
+          eles=Counter((x['cargo'],x['cd_eleicao']) for x in out)
+          with open('data/tse2026/resumo.json','w',encoding='utf-8') as f: json.dump({'total':len(out),'por_cargo':dict(counts),'eleicoes':{f'{k[0]}:{k[1]}':v for k,v in eles.items()},'status_encontrados':status},f,ensure_ascii=False,indent=2)
+          print('Total filtrado',len(out),counts,eles)
           PY
       - name: Commit dos dados filtrados
         run: |

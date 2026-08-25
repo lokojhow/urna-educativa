@@ -1,0 +1,50 @@
+name: Gera SQL Candidatos TSE 2026
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/gera-sql-candidatos.yml'
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Gerar lotes SQL deduplicados
+        run: |
+          python3 - <<'PY'
+          import json, os
+          with open('data/tse2026/candidatos-pe-br.json',encoding='utf-8') as f: data=json.load(f)
+          ids={
+            'DEPUTADO FEDERAL':['9b3753b9-9924-4eb7-9684-550820ea7930'],
+            'DEPUTADO ESTADUAL':['0af4529d-e2ff-4913-ad67-e3fabf522080'],
+            'SENADOR':['06b0eb1f-77a9-45b2-9fd3-5d610279e502','b2eea16a-50d6-4879-9212-8c6568989a12'],
+            'GOVERNADOR':['9510b0f4-7292-40d5-b20c-cc177ccefc39'],
+            'PRESIDENTE':['4d9bdf9c-e660-4fc8-a430-047f872cb587']
+          }
+          rows={}
+          for c in data:
+            for cid in ids.get(c['cargo'],[]):
+              key=(cid,str(c['numero']))
+              rows[key]=(cid,str(c['numero']),c['nome'],c.get('partido') or '',c['uf'],c['sq_candidato'])
+          vals=list(rows.values())
+          os.makedirs('data/tse2026/sql',exist_ok=True)
+          for old in os.listdir('data/tse2026/sql'):
+            if old.endswith('.sql'): os.remove('data/tse2026/sql/'+old)
+          def q(s): return "'"+str(s).replace("'","''")+"'"
+          for i in range(0,len(vals),80):
+            chunk=vals[i:i+80]
+            v=',\n'.join('('+','.join([q(a) for a in r])+',true,'+q('TSE 2026')+')' for r in chunk)
+            sql="insert into public.urna_candidatos (cargo_id,numero,nome,partido,uf,tse_seq,ativo,fonte) values\n"+v+"\non conflict (cargo_id,numero) do update set nome=excluded.nome, partido=excluded.partido, uf=excluded.uf, tse_seq=excluded.tse_seq, ativo=true, fonte='TSE 2026', updated_at=now();\n"
+            with open(f'data/tse2026/sql/lote_{i//80+1:02d}.sql','w',encoding='utf-8') as f: f.write(sql)
+          with open('data/tse2026/sql/manifest.json','w') as f: json.dump({'linhas':len(vals),'lotes':(len(vals)+79)//80},f)
+          print('linhas',len(vals))
+          PY
+      - name: Commit SQL
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add data/tse2026/sql
+          git diff --cached --quiet || git commit -m 'Gera lotes SQL candidatos TSE 2026'
+          git push

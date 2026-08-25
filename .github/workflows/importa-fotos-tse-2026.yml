@@ -1,0 +1,75 @@
+name: Importa fotos TSE 2026
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/importa-fotos-tse-2026.yml'
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Baixar fotos oficiais e enviar para o app
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import io, os, re, json, zipfile, urllib.request, concurrent.futures, mimetypes
+          sources={
+            'PE':'https://cdn.tse.jus.br/estatistica/sead/eleicoes/eleicoes2026/fotos/foto_cand2026_PE_div.zip',
+            'BR':'https://cdn.tse.jus.br/estatistica/sead/eleicoes/eleicoes2026/fotos/foto_cand2026_BR_div.zip',
+          }
+          endpoint='https://dxvqiiawthxwkypvsxci.supabase.co/functions/v1/urna-upload-foto-tse-temp'
+          secret='foto-tse-2026-8f43a1d9'
+          with open('data/tse2026/candidatos-pe-br.json',encoding='utf-8') as f:
+            candidates=json.load(f)
+          wanted={str(x['sq_candidato']) for x in candidates if x.get('sq_candidato')}
+          files=[]
+          for uf,url in sources.items():
+            req=urllib.request.Request(url,headers={'User-Agent':'Mozilla/5.0'})
+            with urllib.request.urlopen(req,timeout=120) as r: raw=r.read()
+            z=zipfile.ZipFile(io.BytesIO(raw))
+            for name in z.namelist():
+              if name.endswith('/'): continue
+              base=os.path.basename(name)
+              ext=os.path.splitext(base)[1].lower().lstrip('.')
+              if ext not in ('jpg','jpeg','png','webp'): continue
+              nums=re.findall(r'\d{10,20}',base)
+              seq=next((n for n in nums if n in wanted),None)
+              if not seq: continue
+              data=z.read(name)
+              mime={'jpg':'image/jpeg','jpeg':'image/jpeg','png':'image/png','webp':'image/webp'}[ext]
+              files.append((seq,ext,mime,data,base))
+          dedup={}
+          for item in files: dedup[item[0]]=item
+          items=list(dedup.values())
+          print('Fotos correspondentes encontradas:',len(items),'de',len(wanted))
+          def send(item):
+            seq,ext,mime,data,base=item
+            req=urllib.request.Request(endpoint,data=data,method='POST',headers={
+              'x-sync-key':secret,'x-tse-seq':seq,'x-ext':ext,'Content-Type':mime,'User-Agent':'GitHub-Actions'
+            })
+            try:
+              with urllib.request.urlopen(req,timeout=60) as r:
+                text=r.read().decode('utf-8','replace')
+                if r.status>=300: return (seq,False,text)
+                return (seq,True,text)
+            except Exception as e: return (seq,False,str(e))
+          ok=0; bad=[]
+          with concurrent.futures.ThreadPoolExecutor(max_workers=16) as ex:
+            for seq,success,msg in ex.map(send,items):
+              if success: ok+=1
+              else: bad.append((seq,msg))
+          print('Enviadas:',ok,'Falhas:',len(bad))
+          if bad:
+            print('Primeiras falhas:',bad[:20])
+          with open('data/tse2026/fotos-importacao.json','w',encoding='utf-8') as f:
+            json.dump({'encontradas':len(items),'enviadas':ok,'falhas':len(bad),'sem_foto':len(wanted)-len(items)},f,ensure_ascii=False,indent=2)
+          if ok < max(1,len(items)*0.9): raise SystemExit('Falhas demais no envio das fotos')
+          PY
+      - name: Salvar resumo da importação
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add data/tse2026/fotos-importacao.json
+          git diff --cached --quiet || git commit -m 'Registra importação das fotos oficiais TSE 2026'
+          git push

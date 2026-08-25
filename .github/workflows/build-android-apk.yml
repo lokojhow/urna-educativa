@@ -4,8 +4,8 @@ on:
   push:
     branches: [main]
     paths:
-      - 'mobile-v2.html'
-      - 'admin-v2.html'
+      - 'mobile-v3.html'
+      - 'admin-v3.html'
       - 'audio/confirm*.txt'
       - '.github/workflows/build-android-apk.yml'
 jobs:
@@ -37,9 +37,7 @@ jobs:
           include ':app'
           EOF
           cat > android-app/build.gradle <<'EOF'
-          plugins {
-              id 'com.android.application' version '8.7.3' apply false
-          }
+          plugins { id 'com.android.application' version '8.7.3' apply false }
           EOF
           cat > android-app/app/build.gradle <<'EOF'
           plugins { id 'com.android.application' }
@@ -50,8 +48,8 @@ jobs:
                   applicationId 'com.urnaeducativa.app'
                   minSdk 26
                   targetSdk 35
-                  versionCode 2
-                  versionName '1.0.1'
+                  versionCode 3
+                  versionName '1.1.0'
               }
           }
           EOF
@@ -60,110 +58,22 @@ jobs:
             <uses-permission android:name="android.permission.INTERNET" />
             <application android:theme="@android:style/Theme.Material.Light.NoActionBar" android:label="Urna Educativa" android:usesCleartextTraffic="false">
               <activity android:name=".MainActivity" android:screenOrientation="sensorLandscape" android:configChanges="orientation|screenSize|keyboardHidden" android:exported="true">
-                <intent-filter>
-                  <action android:name="android.intent.action.MAIN" />
-                  <category android:name="android.intent.category.LAUNCHER" />
-                </intent-filter>
+                <intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent-filter>
               </activity>
             </application>
           </manifest>
           EOF
           cat > android-app/app/src/main/java/com/urnaeducativa/app/MainActivity.java <<'EOF'
           package com.urnaeducativa.app;
-
-          import android.app.Activity;
-          import android.os.Bundle;
-          import android.webkit.*;
-          import android.net.Uri;
-          import android.content.*;
-          import android.media.*;
-          import android.util.Base64;
-          import android.view.WindowManager;
-          import java.io.*;
-
+          import android.app.Activity;import android.os.Bundle;import android.webkit.*;import android.net.Uri;import android.content.*;import android.media.*;import android.util.Base64;import android.view.WindowManager;import java.io.*;
           public class MainActivity extends Activity {
-              private WebView web;
-              private ValueCallback<Uri[]> fileCallback;
-              private static final int FILE_REQ = 7712;
-              private MediaPlayer player;
-              private final Object audioLock = new Object();
-              private File keyFile, confirmFile, finishFile;
-
-              @Override public void onCreate(Bundle b) {
-                  super.onCreate(b);
-                  getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-                  web = new WebView(this);
-                  setContentView(web);
-                  WebSettings s = web.getSettings();
-                  s.setJavaScriptEnabled(true);
-                  s.setDomStorageEnabled(true);
-                  s.setDatabaseEnabled(true);
-                  s.setMediaPlaybackRequiresUserGesture(false);
-                  s.setAllowFileAccess(true);
-                  s.setAllowContentAccess(true);
-                  web.addJavascriptInterface(new AudioBridge(), "NativeAudio");
-                  web.setWebViewClient(new WebViewClient());
-                  web.setWebChromeClient(new WebChromeClient(){
-                      @Override public boolean onShowFileChooser(WebView v, ValueCallback<Uri[]> cb, FileChooserParams p){
-                          if(fileCallback!=null) fileCallback.onReceiveValue(null);
-                          fileCallback=cb;
-                          try { startActivityForResult(p.createIntent(), FILE_REQ); return true; }
-                          catch(Exception e){ fileCallback=null; return false; }
-                      }
-                  });
-                  web.loadUrl("https://lokojhow.github.io/urna-educativa/mobile-v2.html?apk=1&v=101");
-              }
-
-              @Override protected void onActivityResult(int req,int result,Intent data){
-                  super.onActivityResult(req,result,data);
-                  if(req==FILE_REQ && fileCallback!=null){
-                      fileCallback.onReceiveValue(WebChromeClient.FileChooserParams.parseResult(result,data));
-                      fileCallback=null;
-                  }
-              }
-
-              @Override public void onBackPressed(){ if(web!=null && web.canGoBack()) web.goBack(); else super.onBackPressed(); }
-
-              private File decodeData(String data,String name){
-                  try{
-                      if(data==null || data.length()<10) return null;
-                      int comma=data.indexOf(',');
-                      String b64=comma>=0?data.substring(comma+1):data;
-                      byte[] bytes=Base64.decode(b64,Base64.DEFAULT);
-                      File f=new File(getFilesDir(),name+".bin");
-                      try(FileOutputStream out=new FileOutputStream(f)){out.write(bytes);} return f;
-                  }catch(Exception e){return null;}
-              }
-
-              private void playFile(File f,int fallback){
-                  runOnUiThread(()->{
-                      synchronized(audioLock){
-                          try{
-                              if(player!=null){player.stop();player.release();player=null;}
-                              if(f!=null && f.exists()){
-                                  player=new MediaPlayer(); player.setDataSource(f.getAbsolutePath()); player.prepare();
-                              } else player=MediaPlayer.create(MainActivity.this,fallback);
-                              if(player!=null){ player.setOnCompletionListener(mp->{try{mp.release();}catch(Exception ignored){} if(player==mp)player=null;}); player.start(); }
-                          }catch(Exception e){try{if(player!=null)player.release();}catch(Exception ignored){} player=null;}
-                      }
-                  });
-              }
-
-              public class AudioBridge {
-                  @JavascriptInterface public void configure(String key,String confirm,String finish){
-                      new Thread(()->{
-                          keyFile=decodeData(key,"key_custom");
-                          confirmFile=decodeData(confirm,"confirm_custom");
-                          finishFile=decodeData(finish,"finish_custom");
-                      }).start();
-                  }
-                  @JavascriptInterface public void playKey(){
-                      if(keyFile!=null && keyFile.exists()) playFile(keyFile,R.raw.confirmacao);
-                      else runOnUiThread(()->{ToneGenerator t=new ToneGenerator(AudioManager.STREAM_MUSIC,55);t.startTone(ToneGenerator.TONE_PROP_BEEP,55);new android.os.Handler().postDelayed(t::release,90);});
-                  }
-                  @JavascriptInterface public void playConfirm(){ playFile(confirmFile,R.raw.confirmacao); }
-                  @JavascriptInterface public void playFinish(){ playFile(finishFile!=null?finishFile:confirmFile,R.raw.confirmacao); }
-              }
+            private WebView web; private ValueCallback<Uri[]> fileCallback; private static final int FILE_REQ=7712; private MediaPlayer player; private final Object audioLock=new Object(); private File keyFile,confirmFile,finishFile;
+            @Override public void onCreate(Bundle b){super.onCreate(b);getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);web=new WebView(this);setContentView(web);WebSettings s=web.getSettings();s.setJavaScriptEnabled(true);s.setDomStorageEnabled(true);s.setDatabaseEnabled(true);s.setMediaPlaybackRequiresUserGesture(false);s.setAllowFileAccess(true);s.setAllowContentAccess(true);web.addJavascriptInterface(new AudioBridge(),"NativeAudio");web.setWebViewClient(new WebViewClient());web.setWebChromeClient(new WebChromeClient(){@Override public boolean onShowFileChooser(WebView v,ValueCallback<Uri[]> cb,FileChooserParams p){if(fileCallback!=null)fileCallback.onReceiveValue(null);fileCallback=cb;try{startActivityForResult(p.createIntent(),FILE_REQ);return true;}catch(Exception e){fileCallback=null;return false;}}});web.loadUrl("https://lokojhow.github.io/urna-educativa/mobile-v3.html?apk=1&v=110");}
+            @Override protected void onActivityResult(int req,int result,Intent data){super.onActivityResult(req,result,data);if(req==FILE_REQ&&fileCallback!=null){fileCallback.onReceiveValue(WebChromeClient.FileChooserParams.parseResult(result,data));fileCallback=null;}}
+            @Override public void onBackPressed(){if(web!=null&&web.canGoBack())web.goBack();else super.onBackPressed();}
+            private File decodeData(String data,String name){try{if(data==null||data.length()<10)return null;int comma=data.indexOf(',');String b64=comma>=0?data.substring(comma+1):data;byte[] bytes=Base64.decode(b64,Base64.DEFAULT);File f=new File(getFilesDir(),name+".bin");try(FileOutputStream out=new FileOutputStream(f)){out.write(bytes);}return f;}catch(Exception e){return null;}}
+            private void playFile(File f,int fallback){runOnUiThread(()->{synchronized(audioLock){try{if(player!=null){player.stop();player.release();player=null;}if(f!=null&&f.exists()){player=new MediaPlayer();player.setDataSource(f.getAbsolutePath());player.prepare();}else player=MediaPlayer.create(MainActivity.this,fallback);if(player!=null){player.setOnCompletionListener(mp->{try{mp.release();}catch(Exception ignored){}if(player==mp)player=null;});player.start();}}catch(Exception e){try{if(player!=null)player.release();}catch(Exception ignored){}player=null;}}});}
+            public class AudioBridge {@JavascriptInterface public void configure(String key,String confirm,String finish){new Thread(()->{keyFile=decodeData(key,"key_custom");confirmFile=decodeData(confirm,"confirm_custom");finishFile=decodeData(finish,"finish_custom");}).start();}@JavascriptInterface public void playKey(){if(keyFile!=null&&keyFile.exists())playFile(keyFile,R.raw.confirmacao);else runOnUiThread(()->{ToneGenerator t=new ToneGenerator(AudioManager.STREAM_MUSIC,55);t.startTone(ToneGenerator.TONE_PROP_BEEP,55);new android.os.Handler().postDelayed(t::release,90);});}@JavascriptInterface public void playConfirm(){playFile(confirmFile,R.raw.confirmacao);}@JavascriptInterface public void playFinish(){playFile(finishFile!=null?finishFile:confirmFile,R.raw.confirmacao);}}
           }
           EOF
           cat audio/confirm0.txt audio/confirm1.txt audio/confirm2.txt audio/confirm3.txt | tr -d '\r\n ' | base64 -d > android-app/app/src/main/res/raw/confirmacao.mp3
@@ -172,9 +82,9 @@ jobs:
       - name: Build APK
         run: cd android-app && gradle --no-daemon assembleDebug
       - name: Rename APK
-        run: cp android-app/app/build/outputs/apk/debug/app-debug.apk Urna-Educativa.apk
+        run: cp android-app/app/build/outputs/apk/debug/app-debug.apk Urna-Educativa-v1.1.apk
       - uses: actions/upload-artifact@v4
         with:
-          name: Urna-Educativa-APK
-          path: Urna-Educativa.apk
+          name: Urna-Educativa-v1.1-APK
+          path: Urna-Educativa-v1.1.apk
           retention-days: 30

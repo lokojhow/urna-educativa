@@ -1,0 +1,67 @@
+name: Aplica cadastro com aprovação
+on:
+  push:
+    paths:
+      - '.github/workflows/aplica-cadastro-aprovacao.yml'
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Atualizar telas
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          # MOBILE
+          p=Path('mobile-v3.html')
+          s=p.read_text(encoding='utf-8')
+          old='<button class="primary" id="loginBtn">ENTRAR</button><div class="err" id="authErr"></div></div></section>'
+          new='''<button class="primary" id="loginBtn">ENTRAR</button> <button class="secondary" id="showSignupBtn">CRIAR CONTA</button><div class="err" id="authErr"></div><div id="signupBox" class="hidden" style="margin-top:18px;padding-top:16px;border-top:1px solid #ddd"><h2>Criar conta de pesquisador</h2><p class="muted">Sua conta só será liberada depois da aprovação do administrador.</p><div class="field"><label>Nome completo</label><input id="signupName"></div><div class="field"><label>E-mail</label><input id="signupEmail" type="email"></div><div class="field"><label>Senha</label><div style="position:relative"><input id="signupPass" type="password" minlength="6" style="padding-right:52px"><button type="button" aria-label="Mostrar senha" onclick="const p=document.getElementById('signupPass');p.type=p.type==='password'?'text':'password';this.textContent=p.type==='password'?'👁':'🙈'" style="position:absolute;right:5px;top:50%;transform:translateY(-50%);border:0;background:transparent;font-size:22px;padding:5px;cursor:pointer">👁</button></div></div><div style="display:flex;gap:8px"><button class="primary" id="signupBtn">ENVIAR SOLICITAÇÃO</button><button class="secondary" id="cancelSignupBtn">CANCELAR</button></div><div class="err" id="signupErr"></div><div id="signupOk" style="color:#198754;margin-top:10px;font-weight:700"></div></div></div></section>'''
+          if old not in s: raise SystemExit('mobile: bloco de login não encontrado')
+          s=s.replace(old,new,1)
+          marker='async function login()'
+          if marker not in s: raise SystemExit('mobile: função login não encontrada')
+          add='''function toggleSignup(show){$('signupBox').classList.toggle('hidden',!show);$('authErr').textContent='';$('signupErr').textContent='';$('signupOk').textContent=''}async function signup(){$('signupErr').textContent='';$('signupOk').textContent='';let nome=$('signupName').value.trim(),email=$('signupEmail').value.trim(),senha=$('signupPass').value;if(nome.length<3)return $('signupErr').textContent='Informe seu nome completo.';if(!email.includes('@'))return $('signupErr').textContent='Informe um e-mail válido.';if(senha.length<6)return $('signupErr').textContent='A senha precisa ter pelo menos 6 caracteres.';try{let r=await fetch(API+'?action=signup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nome,email,senha})}),d=await r.json().catch(()=>({}));if(!r.ok)throw Error(d.error||'Não foi possível criar a conta.');$('signupOk').textContent='Solicitação enviada. Aguarde a aprovação do administrador.';$('signupName').value='';$('signupEmail').value='';$('signupPass').value=''}catch(e){$('signupErr').textContent=e.message}}'''
+          s=s.replace(marker,add+marker,1)
+          oldh="$('loginBtn').onclick=login;"
+          newh="$('loginBtn').onclick=login;$('showSignupBtn').onclick=()=>toggleSignup(true);$('cancelSignupBtn').onclick=()=>toggleSignup(false);$('signupBtn').onclick=signup;"
+          if oldh not in s: raise SystemExit('mobile: handler login não encontrado')
+          s=s.replace(oldh,newh,1)
+          p.write_text(s,encoding='utf-8')
+
+          # ADMIN
+          p=Path('admin-v3.html')
+          s=p.read_text(encoding='utf-8')
+          old='<button class="tab on" data-p="dash">Dashboard</button><button class="tab" data-p="teams">Equipes</button>'
+          new='<button class="tab on" data-p="dash">Dashboard</button><button class="tab" data-p="requests">Solicitações 🔔 <span id="reqBadge" class="pill">0</span></button><button class="tab" data-p="teams">Equipes</button>'
+          if old not in s: raise SystemExit('admin: tabs não encontradas')
+          s=s.replace(old,new,1)
+          marker='<section id="teams" class="panel">'
+          panel='''<section id="requests" class="panel"><div class="card"><h2>Solicitações de acesso</h2><p class="muted">Novas contas ficam bloqueadas até você aprovar.</p><div class="actions" style="margin-bottom:12px"><button class="btn" id="enableNotifications">ATIVAR NOTIFICAÇÕES</button></div><div id="requestRows"></div></div></section>'''
+          if marker not in s: raise SystemExit('admin: painel teams não encontrado')
+          s=s.replace(marker,panel+marker,1)
+          old='function renderAll(){renderDash();renderTeams();renderUsers();renderCand();renderLayout();renderSounds();renderConfig()}'
+          new='function renderAll(){renderDash();renderRequests();renderTeams();renderUsers();renderCand();renderLayout();renderSounds();renderConfig();startPendingPoll()}'
+          if old not in s: raise SystemExit('admin: renderAll não encontrado')
+          s=s.replace(old,new,1)
+          marker='function renderDash()'
+          funcs='''let pendingPoll=null,lastPendingCount=Number(localStorage.getItem('urna_pending_count')||0);function renderRequests(){let list=(results.pendentes||[]).filter(x=>x.status_aprovacao==='pendente');$('reqBadge').textContent=list.length;let box=$('requestRows');if(!list.length){box.innerHTML='<div class="muted">Nenhuma solicitação pendente.</div>';return}box.innerHTML=list.map(u=>{let opts='<option value="">Sem equipe</option>'+teams.filter(t=>t.ativo!==false).map(t=>'<option value="'+esc(t.id)+'">'+esc(t.nome)+'</option>').join('');return '<div class="card" style="border:1px solid #d9e0e8"><div class="grid3"><div><b>'+esc(u.nome)+'</b><div class="muted">'+esc(u.email)+'</div><div class="muted">Solicitado em '+(u.solicitado_em?new Date(u.solicitado_em).toLocaleString('pt-BR'):'agora')+'</div></div><div class="field"><label>Equipe</label><select id="teamReq_'+u.user_id+'">'+opts+'</select></div><div class="field"><label>Meta diária</label><input id="goalReq_'+u.user_id+'" type="number" min="1" value="10"></div></div><div class="actions"><button class="btn" onclick="approveReq(\''+u.user_id+'\')">APROVAR</button><button class="btn danger" onclick="rejectReq(\''+u.user_id+'\')">RECUSAR</button></div></div>'}).join('')}window.approveReq=async id=>{try{let equipe=$('teamReq_'+id)?.value||null,meta=Number($('goalReq_'+id)?.value)||10;await api('approve-user',{method:'POST',body:JSON.stringify({user_id:id,equipe_id:equipe,meta_diaria:meta})});await loadAll()}catch(e){alert(e.message)}};window.rejectReq=async id=>{if(!confirm('Recusar esta solicitação?'))return;try{await api('reject-user',{method:'POST',body:JSON.stringify({user_id:id})});await loadAll()}catch(e){alert(e.message)}};function checkPendingNotification(){let n=(results.pendentes||[]).length;if(n>lastPendingCount&&n>0&&'Notification'in window&&Notification.permission==='granted'){new Notification('Urna Educativa',{body:n===1?'Nova solicitação de pesquisador.':n+' solicitações de pesquisadores aguardando aprovação.'})}lastPendingCount=n;localStorage.setItem('urna_pending_count',String(n))}function startPendingPoll(){checkPendingNotification();if(pendingPoll)return;pendingPoll=setInterval(async()=>{if(!session)return;try{let r=await api('results');results=r;users=r.pesquisadores||users;renderRequests();checkPendingNotification()}catch(e){}},15000)}async function enableAdminNotifications(){if(!('Notification'in window))return alert('Notificações do navegador não são suportadas neste aparelho.');let p=await Notification.requestPermission();alert(p==='granted'?'Notificações ativadas.':'Permissão de notificação não foi concedida.')}'''
+          if marker not in s: raise SystemExit('admin: renderDash não encontrado')
+          s=s.replace(marker,funcs+marker,1)
+          # handler do botão de notificações, inserido antes do fechamento do script
+          anchor="$('logout').onclick"
+          if anchor not in s: raise SystemExit('admin: handler logout não encontrado')
+          s=s.replace(anchor,"$('enableNotifications').onclick=enableAdminNotifications;"+anchor,1)
+          p.write_text(s,encoding='utf-8')
+          PY
+      - name: Commit
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add mobile-v3.html admin-v3.html
+          git diff --cached --quiet || git commit -m 'Cadastro próprio com aprovação do administrador'
+          git push

@@ -1,0 +1,36 @@
+name: Precarrega fotos dos candidatos
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/precarrega-fotos-candidatos.yml'
+jobs:
+  warm:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Precarregar todas as fotos
+        run: |
+          python3 - <<'PY'
+          import json, urllib.request, concurrent.futures
+          with open('data/tse2026/candidatos-pe-br.json',encoding='utf-8') as f:
+              data=json.load(f)
+          seqs=sorted({str(x.get('sq_candidato','')).strip() for x in data if x.get('sq_candidato')})
+          base='https://dxvqiiawthxwkypvsxci.supabase.co/functions/v1/urna-foto-candidato?tse_seq='
+          def hit(seq):
+              try:
+                  req=urllib.request.Request(base+seq,headers={'User-Agent':'UrnaEducativaPreload/1.0'})
+                  with urllib.request.urlopen(req,timeout=30) as r:
+                      b=r.read(32)
+                      ok=(r.status==200 and (r.headers.get('content-type') or '').startswith('image/'))
+                      return seq,ok,r.status
+              except Exception as e:
+                  return seq,False,str(e)
+          ok=0; bad=[]
+          with concurrent.futures.ThreadPoolExecutor(max_workers=48) as ex:
+              for seq,success,info in ex.map(hit,seqs):
+                  if success: ok+=1
+                  else: bad.append((seq,info))
+          print('TOTAL',len(seqs),'OK',ok,'FALHAS',len(bad))
+          if bad: print('Primeiras falhas',bad[:30])
+          PY

@@ -1,0 +1,56 @@
+name: Adiciona endereço do participante
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/adiciona-endereco-participante.yml'
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Ajustar formulário e armazenamento local
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          # Formulário da entrevista
+          p=Path('mobile-v4.html')
+          s=p.read_text(encoding='utf-8')
+          old='<div class="field" id="fDistrict"><label>Bairro / comunidade</label><input id="district"></div><div class="field" id="fAge">'
+          new='<div class="field" id="fDistrict"><label>Bairro / comunidade</label><input id="district" placeholder="Bairro, povoado ou comunidade"></div><div class="field" id="fAddress"><label>Endereço / localidade</label><input id="address" placeholder="Rua e número, sítio, fazenda ou localidade rural"></div><div class="field" id="fAge">'
+          if old not in s: raise SystemExit('Trecho do formulário não encontrado')
+          s=s.replace(old,new,1)
+          p.write_text(s,encoding='utf-8')
+
+          # Banco local/offline e sincronização
+          p=Path('offline-app.js')
+          s=p.read_text(encoding='utf-8')
+          old="bairro:$('district').value.trim()||null,faixa_etaria:"
+          new="bairro:$('district').value.trim()||null,endereco:$('address').value.trim()||null,faixa_etaria:"
+          if old not in s: raise SystemExit('Trecho do participante offline não encontrado')
+          s=s.replace(old,new,1)
+          p.write_text(s,encoding='utf-8')
+
+          # Painel: quando houver exibição de bairro no detalhamento, acrescentar endereço/localidade.
+          p=Path('admin-v4.html')
+          s=p.read_text(encoding='utf-8')
+          candidates=[
+            ("${esc(p.bairro||'—')}", "${esc(p.bairro||'—')}<br><span class=\"muted\">${esc(p.endereco||'Endereço não informado')}</span>"),
+            ("${esc(part.bairro||'—')}", "${esc(part.bairro||'—')}<br><span class=\"muted\">${esc(part.endereco||'Endereço não informado')}</span>"),
+            ("${esc(e.urna_participantes?.bairro||'—')}", "${esc(e.urna_participantes?.bairro||'—')}<br><span class=\"muted\">${esc(e.urna_participantes?.endereco||'Endereço não informado')}</span>")
+          ]
+          for old,new in candidates:
+            if old in s:
+              s=s.replace(old,new)
+          p.write_text(s,encoding='utf-8')
+          PY
+      - name: Commit
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add mobile-v4.html offline-app.js admin-v4.html
+          git diff --cached --quiet || git commit -m 'Adiciona endereço e localidade rural aos participantes'
+          git push

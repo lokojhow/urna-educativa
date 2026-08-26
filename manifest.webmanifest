@@ -1,0 +1,12 @@
+{
+  "name": "Urna Educativa",
+  "short_name": "Urna Educativa",
+  "start_url": "./mobile-v4.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "landscape",
+  "background_color": "#071426",
+  "theme_color": "#071426",
+  "description": "Urna educativa e pesquisa voluntária com funcionamento offline.",
+  "icons": []
+}

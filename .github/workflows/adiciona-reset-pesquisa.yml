@@ -1,0 +1,37 @@
+name: Adiciona botão para apagar pesquisa
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/adiciona-reset-pesquisa.yml'
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Atualizar painel administrativo
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('admin-v3.html')
+          s=p.read_text(encoding='utf-8')
+          if 'id="resetPesquisa"' not in s:
+              card='''<div class="card" style="border:2px solid #b42318"><h2 style="color:#b42318">Zona de perigo</h2><p class="muted">Apaga todas as entrevistas, respostas, participantes e bloqueios de duplicidade. Usuários, equipes, candidatos, fotos, sons e configurações serão mantidos.</p><button class="btn danger" id="resetPesquisa">APAGAR TODA A PESQUISA</button><div id="resetMsg" class="okmsg"></div></div>'''
+              marker='</section></div></div><script>'
+              if marker not in s: raise SystemExit('Marcador final não encontrado')
+              s=s.replace(marker,card+marker,1)
+          if 'async function resetPesquisaCompleta' not in s:
+              js='''\nasync function resetPesquisaCompleta(){\n  const aviso='ATENÇÃO: isto apagará TODAS as entrevistas, votos registrados, participantes e bloqueios de repetição.\\n\\nUsuários, equipes, candidatos e configurações serão mantidos.';\n  if(!confirm(aviso))return;\n  const palavra=prompt('Para confirmar, digite APAGAR exatamente como aparece abaixo:');\n  if(palavra!=='APAGAR'){alert('Operação cancelada.');return;}\n  const btn=document.getElementById('resetPesquisa');\n  const msg=document.getElementById('resetMsg');\n  btn.disabled=true; msg.textContent='Apagando dados da pesquisa...';\n  try{\n    const r=await fetch(SB+'/functions/v1/urna-admin-reset-pesquisa',{method:'POST',headers:{'Authorization':'Bearer '+session.access_token,'Content-Type':'application/json'},body:JSON.stringify({confirmacao:'APAGAR'})});\n    const d=await r.json().catch(()=>({}));\n    if(!r.ok)throw Error(d.error||'Não foi possível apagar a pesquisa.');\n    msg.textContent='Pesquisa apagada com sucesso.';\n    alert('Pesquisa apagada com sucesso. Os testes anteriores foram removidos.');\n    await loadAll();\n  }catch(e){msg.textContent='';alert(e.message||String(e));}\n  finally{btn.disabled=false;}\n}\ndocument.getElementById('resetPesquisa').onclick=resetPesquisaCompleta;\n'''
+              s=s.replace('</script>',js+'</script>',1)
+          p.write_text(s,encoding='utf-8')
+          PY
+      - name: Commit
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add admin-v3.html
+          git diff --cached --quiet || git commit -m 'Adiciona botão seguro para apagar toda a pesquisa'
+          git push

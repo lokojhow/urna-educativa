@@ -1,0 +1,37 @@
+name: Configura ícone no APK
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/patch-build-icon.yml'
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Atualizar build Android
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('.github/workflows/build-android-apk.yml')
+          s=p.read_text(encoding='utf-8')
+          if "      - 'assets/app-icon.b64'" not in s:
+              s=s.replace("      - 'audio/confirm*.txt'\n", "      - 'audio/confirm*.txt'\n      - 'assets/app-icon.b64'\n")
+          old="mkdir -p android-app/app/src/main/java/com/urnaeducativa/app android-app/app/src/main/res/raw android-app/app/src/main/assets/photos"
+          new="mkdir -p android-app/app/src/main/java/com/urnaeducativa/app android-app/app/src/main/res/raw android-app/app/src/main/res/drawable android-app/app/src/main/assets/photos\n          base64 -d assets/app-icon.b64 > android-app/app/src/main/res/drawable/app_icon.jpg"
+          s=s.replace(old,new)
+          s=s.replace('android:label="Urna Educativa" android:usesCleartextTraffic="false"','android:label="Urna Educativa" android:icon="@drawable/app_icon" android:roundIcon="@drawable/app_icon" android:usesCleartextTraffic="false"')
+          s=s.replace("versionCode 4; versionName '1.2.0'", "versionCode 5; versionName '1.2.1'")
+          s=s.replace('Urna-Educativa-v1.2-Offline.apk','Urna-Educativa-v1.2.1-Offline.apk')
+          s=s.replace('Urna-Educativa-v1.2-Offline-APK','Urna-Educativa-v1.2.1-Offline-APK')
+          p.write_text(s,encoding='utf-8')
+          PY
+      - name: Commit
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add .github/workflows/build-android-apk.yml
+          git diff --cached --quiet || git commit -m 'Usa ícone oficial no APK Android'
+          git push

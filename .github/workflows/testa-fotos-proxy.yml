@@ -1,0 +1,18 @@
+name: Testa fotos proxy
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/testa-fotos-proxy.yml'
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Testar imagens
+        run: |
+          set -e
+          for S in 170002537227 170002543759 170002552553; do
+            echo "SEQ $S"
+            curl -L --silent --show-error -o /tmp/$S.img -w 'HTTP=%{http_code} TYPE=%{content_type} SIZE=%{size_download}\n' "https://dxvqiiawthxwkypvsxci.supabase.co/functions/v1/urna-foto-candidato?tse_seq=$S"
+            file /tmp/$S.img || true
+          done

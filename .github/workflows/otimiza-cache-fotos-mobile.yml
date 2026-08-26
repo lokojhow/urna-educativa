@@ -1,0 +1,50 @@
+name: Otimiza cache de fotos no mobile
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/otimiza-cache-fotos-mobile.yml'
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Aplicar cache inteligente de fotos
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('mobile-v3.html')
+          s=p.read_text(encoding='utf-8')
+          old="let session=null,profile=null,cargos=[],cands=[],cfg={layout:{},sons:{},pesquisa:{}},step=0,typed='',blank=false,sen1=null,interview=null,mode='pesquisa';"
+          new="let session=null,profile=null,cargos=[],cands=[],cfg={layout:{},sons:{},pesquisa:{}},step=0,typed='',blank=false,sen1=null,interview=null,mode='pesquisa',photoMem=new Map(),photoPending=new Set(),photoQueue=[],photoActive=0;"
+          if old not in s: raise SystemExit('marcador variaveis nao encontrado')
+          s=s.replace(old,new,1)
+          marker="function office(){return cargos[step]||null}"
+          funcs="""function queuePhoto(c,priority=false){if(!c||!c.foto_url||photoMem.has(c.foto_url)||photoPending.has(c.foto_url))return;photoPending.add(c.foto_url);priority?photoQueue.unshift(c):photoQueue.push(c);pumpPhotos()}function pumpPhotos(){while(photoActive<10&&photoQueue.length){let c=photoQueue.shift(),u=c.foto_url;photoActive++;fetch(u,{cache:'force-cache'}).then(r=>{if(!r.ok)throw Error('foto');return r.blob()}).then(b=>{photoMem.set(u,URL.createObjectURL(b))}).catch(()=>{}).finally(()=>{photoPending.delete(u);photoActive--;pumpPhotos();if(current()&&current().foto_url===u)render()})}}function preloadPrefix(){let o=office();if(!o||!typed)return;let matches=cands.filter(c=>c.cargo_id===o.id&&String(c.numero).startsWith(typed)&&c.foto_url);matches.slice(0,100).reverse().forEach(c=>queuePhoto(c,true))}function warmOffice(i){let o=cargos[i];if(!o)return;cands.filter(c=>c.cargo_id===o.id&&c.foto_url).forEach(c=>queuePhoto(c,false))}function photoSrc(c){return c&&c.foto_url?(photoMem.get(c.foto_url)||c.foto_url):''}"""
+          if marker not in s: raise SystemExit('marcador office nao encontrado')
+          s=s.replace(marker,funcs+marker,1)
+          old="profile=b.pesquisador;cargos=b.cargos||[];cands=b.candidatos||[];await loadConfig();"
+          new="profile=b.pesquisador;cargos=b.cargos||[];cands=b.candidatos||[];warmOffice(0);await loadConfig();"
+          if old not in s: raise SystemExit('marcador bootstrap nao encontrado')
+          s=s.replace(old,new,1)
+          old="if(c.foto_url){$('cphoto').src=c.foto_url;$('cphoto').style.display='block'}else $('cphoto').style.display='none';"
+          new="if(c.foto_url){queuePhoto(c,true);$('cphoto').src=photoSrc(c);$('cphoto').style.display='block'}else $('cphoto').style.display='none';"
+          if old not in s: raise SystemExit('marcador render foto nao encontrado')
+          s=s.replace(old,new,1)
+          old="keySound();blank=false;typed+=n;render()}"
+          new="keySound();blank=false;typed+=n;preloadPrefix();render()}"
+          if old not in s: raise SystemExit('marcador tap nao encontrado')
+          s=s.replace(old,new,1)
+          old="step++;typed='';blank=false;if(last&&mode==='pesquisa'"
+          new="step++;typed='';blank=false;warmOffice(step);if(last&&mode==='pesquisa'"
+          if old not in s: raise SystemExit('marcador proximo cargo nao encontrado')
+          s=s.replace(old,new,1)
+          p.write_text(s,encoding='utf-8')
+          PY
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add mobile-v3.html
+          git diff --cached --quiet || git commit -m 'Acelera fotos com cache local e prefetch por prefixo'
+          git push

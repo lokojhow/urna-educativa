@@ -1,0 +1,57 @@
+name: Corrige painel administrativo
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/corrige-admin-script-reset.yml'
+permissions:
+  contents: write
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Corrigir admin-v3
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('admin-v3.html')
+          s=p.read_text()
+          marker='</script></body></html>'
+          bad=s.find(marker)
+          if bad < 0:
+              raise SystemExit('fechamento principal nao encontrado')
+          end=bad+len(marker)
+          # O patch anterior colocou JavaScript depois do fechamento do HTML, o que quebrou o script principal.
+          s=s[:end]
+          insert="""\nasync function resetPesquisaCompleta(){
+  const aviso='ATENÇÃO: isto apagará TODAS as entrevistas, votos registrados, participantes e bloqueios de repetição.\\n\\nUsuários, equipes, candidatos e configurações serão mantidos.';
+  if(!confirm(aviso))return;
+  const palavra=prompt('Para confirmar, digite APAGAR exatamente como aparece abaixo:');
+  if(palavra!=='APAGAR'){alert('Operação cancelada.');return;}
+  const btn=$('resetPesquisa'),msg=$('resetMsg');
+  btn.disabled=true;msg.textContent='Apagando dados da pesquisa...';
+  try{
+    const r=await fetch(SB+'/functions/v1/urna-admin-reset-pesquisa',{method:'POST',headers:{Authorization:'Bearer '+session.access_token,'Content-Type':'application/json'},body:JSON.stringify({confirmacao:'APAGAR'})});
+    const d=await r.json().catch(()=>({}));
+    if(!r.ok)throw Error(d.error||'Não foi possível apagar a pesquisa.');
+    msg.textContent='Pesquisa apagada com sucesso.';
+    alert('Pesquisa apagada com sucesso.');
+    await loadAll();
+  }catch(e){msg.textContent='';alert(e.message||String(e));}
+  finally{btn.disabled=false;}
+}
+$('resetPesquisa').onclick=resetPesquisaCompleta;
+"""
+          # Inserir ANTES do fechamento do script principal.
+          pos=s.rfind('</script>')
+          s=s[:pos]+insert+s[pos:]
+          p.write_text(s)
+          PY
+      - name: Commit
+        run: |
+          git config user.name "lokojhow"
+          git config user.email "discipulojonathas@gmail.com"
+          git add admin-v3.html
+          git commit -m "Corrige travamento do login administrativo" || exit 0
+          git push

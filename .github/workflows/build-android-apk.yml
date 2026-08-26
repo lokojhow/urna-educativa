@@ -8,6 +8,7 @@ on:
       - 'offline-app.js'
       - 'admin-v4.html'
       - 'audio/confirm*.txt'
+      - 'assets/app-icon.b64'
       - '.github/workflows/build-android-apk.yml'
 jobs:
   build:
@@ -25,7 +26,8 @@ jobs:
       - name: Create offline Android project
         shell: bash
         run: |
-          mkdir -p android-app/app/src/main/java/com/urnaeducativa/app android-app/app/src/main/res/raw android-app/app/src/main/assets/photos
+          mkdir -p android-app/app/src/main/java/com/urnaeducativa/app android-app/app/src/main/res/raw android-app/app/src/main/res/drawable android-app/app/src/main/assets/photos
+          base64 -d assets/app-icon.b64 > android-app/app/src/main/res/drawable/app_icon.jpg
           cp mobile-v4.html offline-app.js admin-v4.html manifest.webmanifest android-app/app/src/main/assets/
           cat > android-app/app/src/main/assets/android-local.js <<'EOF'
           const __saveBootstrap=saveBootstrap;
@@ -80,10 +82,10 @@ jobs:
           EOF
           cat > android-app/app/build.gradle <<'EOF'
           plugins { id 'com.android.application' }
-          android { namespace 'com.urnaeducativa.app'; compileSdk 35; defaultConfig { applicationId 'com.urnaeducativa.app'; minSdk 26; targetSdk 35; versionCode 4; versionName '1.2.0' } }
+          android { namespace 'com.urnaeducativa.app'; compileSdk 35; defaultConfig { applicationId 'com.urnaeducativa.app'; minSdk 26; targetSdk 35; versionCode 5; versionName '1.2.1' } }
           EOF
           cat > android-app/app/src/main/AndroidManifest.xml <<'EOF'
-          <manifest xmlns:android="http://schemas.android.com/apk/res/android"><uses-permission android:name="android.permission.INTERNET"/><application android:theme="@android:style/Theme.Material.Light.NoActionBar" android:label="Urna Educativa" android:usesCleartextTraffic="false"><activity android:name=".MainActivity" android:screenOrientation="sensorLandscape" android:configChanges="orientation|screenSize|keyboardHidden" android:exported="true"><intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter></activity></application></manifest>
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android"><uses-permission android:name="android.permission.INTERNET"/><application android:theme="@android:style/Theme.Material.Light.NoActionBar" android:label="Urna Educativa" android:icon="@drawable/app_icon" android:roundIcon="@drawable/app_icon" android:usesCleartextTraffic="false"><activity android:name=".MainActivity" android:screenOrientation="sensorLandscape" android:configChanges="orientation|screenSize|keyboardHidden" android:exported="true"><intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter></activity></application></manifest>
           EOF
           cat > android-app/app/src/main/java/com/urnaeducativa/app/MainActivity.java <<'EOF'
           package com.urnaeducativa.app;
@@ -98,6 +100,6 @@ jobs:
           cat audio/confirm0.txt audio/confirm1.txt audio/confirm2.txt audio/confirm3.txt | tr -d '\r\n ' | base64 -d > android-app/app/src/main/res/raw/confirmacao.mp3
       - name: Build APK
         run: cd android-app && gradle --no-daemon assembleDebug
-      - run: cp android-app/app/build/outputs/apk/debug/app-debug.apk Urna-Educativa-v1.2-Offline.apk
+      - run: cp android-app/app/build/outputs/apk/debug/app-debug.apk Urna-Educativa-v1.2.1-Offline.apk
       - uses: actions/upload-artifact@v4
-        with: {name: Urna-Educativa-v1.2-Offline-APK, path: Urna-Educativa-v1.2-Offline.apk, retention-days: 30}
+        with: {name: Urna-Educativa-v1.2.1-Offline-APK, path: Urna-Educativa-v1.2.1-Offline.apk, retention-days: 30}
